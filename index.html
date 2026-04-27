@@ -223,6 +223,13 @@
     letter-spacing: -0.02em;
     color: var(--ink);
   }
+  /* (v06) Inner zeros render in accent green — applies the 0fam wordmark
+     rule from the brand spec ("the 0 renders in --accent while other
+     letters stay in --ink"). Mirrors the treatment in t0ck v59 (same
+     .zero class name) and the OG image. */
+  .brand .zero {
+    color: var(--accent);
+  }
 
   .version {
     font-family: 'Space Mono', monospace;
@@ -953,18 +960,24 @@
   /* Chord grid — fixed-width cards that wrap responsively. 128px per card
      leaves room for a comfortable 5-string / 6-string diagram plus name and
      open/muted markers without feeling crowded. */
+  /* (v07) 2-column chord grid at every breakpoint. Was auto-fit minmax
+     which produced 4 columns on phones at small sizes. Two-wide gives
+     each diagram ~2× the visual area at the size that matters most for
+     legibility (phone), preserves a "page of chord book" reading model
+     (one chord at a time, not a wall), and handles odd chord counts
+     more gracefully (5 chords → 2-2-1 instead of an orphan in row 2). */
   .chord-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(116px, 1fr));
-    gap: 14px;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
   }
 
   .chord-card {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
-    padding: 14px 10px 12px;
+    gap: 10px;
+    padding: 16px 12px 14px;
     border: 1px solid var(--border);
     border-radius: 12px;
     background: transparent;
@@ -973,23 +986,30 @@
   .chord-name {
     font-family: 'Space Mono', monospace;
     font-weight: 700;
-    font-size: 18px;
+    font-size: 22px;
     color: var(--ink);
     letter-spacing: -0.02em;
     line-height: 1;
   }
 
-  /* Chord SVG is sized intrinsically in the renderer; CSS just controls
-     colors via CSS vars so the diagram tracks the theme. */
+  /* SVG fills the card width; viewBox preserves the diagram's aspect
+     ratio. This is the difference between v06 and v07 — old code set
+     explicit pixel width/height on the SVG element, so diagrams stayed
+     small even when cards grew. Now they scale up to fill the column. */
+  .chord-svg {
+    width: 100%;
+    height: auto;
+    max-width: 180px;
+  }
   .chord-svg .fret-line,
   .chord-svg .string-line { stroke: var(--border); }
   .chord-svg .nut          { stroke: var(--ink); }
   .chord-svg .dot          { fill: var(--ink); }
-  .chord-svg .dot-text     { fill: var(--bg); font-family: 'Inter', sans-serif; font-weight: 600; font-size: 9px; }
-  .chord-svg .open-o       { fill: none; stroke: var(--ink); stroke-width: 1.2; }
-  .chord-svg .mute-x       { stroke: var(--muted); stroke-width: 1.2; }
-  .chord-svg .string-label { fill: var(--muted); font-family: 'Space Mono', monospace; font-size: 9px; }
-  .chord-svg .drone-mark   { fill: var(--muted); font-family: 'Space Mono', monospace; font-size: 8px; }
+  .chord-svg .dot-text     { fill: var(--bg); font-family: 'Inter', sans-serif; font-weight: 700; font-size: 11px; }
+  .chord-svg .open-o       { fill: none; stroke: var(--ink); }
+  .chord-svg .mute-x       { stroke: var(--muted); }
+  .chord-svg .string-label { fill: var(--muted); font-family: 'Space Mono', monospace; font-size: 11px; }
+  .chord-svg .drone-mark   { fill: var(--muted); font-family: 'Space Mono', monospace; font-size: 9px; }
 
   .chord-note {
     font-family: 'Space Mono', monospace;
@@ -1003,9 +1023,9 @@
 <body style="background:#F9F9F9;color:#034D32">
 
 <header>
-  <div class="brand">t00n</div>
+  <div class="brand">t<span class="zero">00</span>n</div>
   <div class="header-meta">
-    <span class="version">v05 · 20260425</span>
+    <span class="version">v07 · 20260427</span>
     <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme" title="Toggle theme">
       <!-- Lucide sun + moon paths, 24-viewBox, 18×18 rendered, stroke-width 2.
            Shown via CSS based on html[data-theme]: light theme shows the
@@ -1261,6 +1281,28 @@
 //                    4) Refreshed meta description, OG, and Twitter copy
 //                       to reflect all 8 presets (added mandolin/banjo/
 //                       cello in v03) and the chord drawer (v03/v04).
+// v06 (2026-04-27) — wordmark color: the two zeros in the header "t00n"
+//                    wordmark now render in --accent (#028454) while the
+//                    "t" and "n" stay in --ink (#034D32). Matches the
+//                    0fam house-style accent-zero rule already shipped
+//                    in t0ck v59. Same .zero class name for consistency
+//                    across the family (every product substitutes a
+//                    zero for an o and paints it accent green to make
+//                    the substitution legible at a glance).
+// v07 (2026-04-27) — chord drawer: locked the chord grid to 2 columns
+//                    at every breakpoint (was auto-fit minmax which
+//                    produced 4-up on phones). Two-wide gives each
+//                    diagram ~2× the visual area at the size that
+//                    matters most for legibility, preserves a "page of
+//                    chord book" reading model, and handles odd chord
+//                    counts more gracefully (5 chords renders as 2-2-1
+//                    instead of an awkward 4+1 orphan). Diagrams now
+//                    fill the card width via SVG viewBox + CSS
+//                    width:100% (was explicit pixel sizing). Internal
+//                    grid spacing bumped 14→18px (strings) and 16→20px
+//                    (frets), with dots/markers/text scaled
+//                    proportionally so the encoded sizes look right
+//                    at the new card scale.
 
 (() => {
   'use strict';
@@ -1953,17 +1995,22 @@
   function renderChordSVG(chord, strings) {
     const numStrings = strings.length;
     const FRETS = 4;
-    const SS = 14;   // string spacing
-    const FS = 16;   // fret spacing
-    const PAD_LEFT = 10;
-    const PAD_TOP = 16;
-    const PAD_BOTTOM = 16;
+    // (v07) Internal grid bumped from 14×16 to 18×20 to match the bigger
+    // 2-col layout. The SVG scales to fill its card via CSS, but starting
+    // with a larger viewBox means strokes/dots/text don't get proportionally
+    // thinner when CSS scales the SVG up — they're encoded at meaningful
+    // sizes relative to the diagram itself.
+    const SS = 18;   // string spacing
+    const FS = 20;   // fret spacing
+    const PAD_LEFT = 12;
+    const PAD_TOP = 18;
+    const PAD_BOTTOM = 18;
     const gridW = (numStrings - 1) * SS;
     const gridH = FRETS * FS;
     const W = gridW + PAD_LEFT * 2;
     const H = PAD_TOP + gridH + PAD_BOTTOM;
 
-    let svg = '<svg class="chord-svg" viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '" aria-hidden="true">';
+    let svg = '<svg class="chord-svg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" aria-hidden="true">';
 
     // Nut (top line, thicker). Horizontal line spanning all strings.
     svg += '<line class="nut" x1="' + PAD_LEFT + '" y1="' + PAD_TOP + '" x2="' + (PAD_LEFT + gridW) + '" y2="' + PAD_TOP + '" stroke-width="2.5" />';
@@ -1985,22 +2032,22 @@
       const fret = chord.frets[s];
       const finger = chord.fingers ? chord.fingers[s] : 0;
       const x = PAD_LEFT + s * SS;
-      const markerY = PAD_TOP - 6;
+      const markerY = PAD_TOP - 8;
 
       if (fret === -1) {
         // Muted string — X above the nut.
-        svg += '<line class="mute-x" x1="' + (x - 3) + '" y1="' + (markerY - 3) + '" x2="' + (x + 3) + '" y2="' + (markerY + 3) + '" />';
-        svg += '<line class="mute-x" x1="' + (x - 3) + '" y1="' + (markerY + 3) + '" x2="' + (x + 3) + '" y2="' + (markerY - 3) + '" />';
+        svg += '<line class="mute-x" x1="' + (x - 4) + '" y1="' + (markerY - 4) + '" x2="' + (x + 4) + '" y2="' + (markerY + 4) + '" stroke-width="1.6" />';
+        svg += '<line class="mute-x" x1="' + (x - 4) + '" y1="' + (markerY + 4) + '" x2="' + (x + 4) + '" y2="' + (markerY - 4) + '" stroke-width="1.6" />';
       } else if (fret === 0) {
         // Open string — O above the nut.
-        svg += '<circle class="open-o" cx="' + x + '" cy="' + markerY + '" r="3" />';
+        svg += '<circle class="open-o" cx="' + x + '" cy="' + markerY + '" r="4" stroke-width="1.5" />';
       } else {
         // Fretted — filled dot centered in the fret space.
         const y = PAD_TOP + (fret - 0.5) * FS;
-        svg += '<circle class="dot" cx="' + x + '" cy="' + y + '" r="5.5" />';
+        svg += '<circle class="dot" cx="' + x + '" cy="' + y + '" r="7" />';
         if (finger > 0) {
           // Finger number inside the dot, white text for contrast on --ink dots.
-          svg += '<text class="dot-text" x="' + x + '" y="' + (y + 3) + '" text-anchor="middle">' + finger + '</text>';
+          svg += '<text class="dot-text" x="' + x + '" y="' + (y + 3.5) + '" text-anchor="middle">' + finger + '</text>';
         }
       }
     }
